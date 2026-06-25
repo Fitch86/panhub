@@ -61,7 +61,8 @@ export class SearchService {
     sourceType: "all" | "tg" | "plugin" | undefined,
     plugins: string[] | undefined,
     cloudTypes: string[] | undefined,
-    ext: Record<string, any> | undefined
+    ext: Record<string, any> | undefined,
+    signal?: AbortSignal
   ): Promise<SearchResponse> {
     const { response } = await this.searchWithWarnings(
       keyword,
@@ -72,7 +73,8 @@ export class SearchService {
       sourceType,
       plugins,
       cloudTypes,
-      ext
+      ext,
+      signal
     );
 
     return response;
@@ -87,8 +89,14 @@ export class SearchService {
     sourceType: "all" | "tg" | "plugin" | undefined,
     plugins: string[] | undefined,
     cloudTypes: string[] | undefined,
-    ext: Record<string, any> | undefined
+    ext: Record<string, any> | undefined,
+    signal?: AbortSignal
   ): Promise<{ response: SearchResponse; warnings: WarningInfo[] }> {
+    // 客户端已断开，直接返回空结果
+    if (signal?.aborted) {
+      return { response: { total: 0 }, warnings: [] };
+    }
+
     const errorCollector = new ErrorCollector();
     const effChannels =
       channels && channels.length > 0 ? channels : this.options.defaultChannels;
@@ -116,7 +124,8 @@ export class SearchService {
           effChannels,
           !!forceRefresh,
           concOverride,
-          ext
+          ext,
+          signal
         );
       });
     }
@@ -128,7 +137,8 @@ export class SearchService {
           !!forceRefresh,
           effConcurrency,
           ext ?? {},
-          errorCollector
+          errorCollector,
+          signal
         );
       });
     }
@@ -188,7 +198,8 @@ export class SearchService {
     channels: string[] | undefined,
     forceRefresh: boolean,
     concurrencyOverride?: number,
-    ext?: Record<string, any>
+    ext?: Record<string, any>,
+    signal?: AbortSignal
   ): Promise<SearchResult[]> {
     const chList = Array.isArray(channels) ? channels : [];
     const cacheKey = `tg:${keyword}:${[...chList].sort().join(",")}`;
@@ -220,14 +231,25 @@ export class SearchService {
 
     const createChannelTask =
       (channel: string, limitPerChannel: number) => async () => {
+        // 客户端断开时跳过
+        if (signal?.aborted) return [];
+
+        const controller = new AbortController();
+        // 将外部取消和超时合并：任一触发都会 abort
+        const mergedSignal = signal
+          ? AbortSignal.any([signal, controller.signal])
+          : controller.signal;
+
         const result = await safeExecute(
           () =>
             this.withTimeout<SearchResult[]>(
               fetchTgChannelPosts(channel, keyword, {
                 limitPerChannel,
+                signal: mergedSignal,
               }),
               timeoutMs,
-              []
+              [],
+              controller
             ),
           []
         );
@@ -248,7 +270,7 @@ export class SearchService {
       createChannelTask(channel, SearchService.TG_CHANNEL_LIMIT)
     );
     const shallowResults = flattenResults(
-      await this.runWithConcurrency(shallowTasks, concurrency)
+      await this.runWithConcurrency(shallowTasks, concurrency, signal)
     );
 
     let results = shallowResults;
@@ -261,7 +283,7 @@ export class SearchService {
         createChannelTask(channel, SearchService.TG_DEEP_CHANNEL_LIMIT)
       );
       const deepResults = flattenResults(
-        await this.runWithConcurrency(deepTasks, concurrency)
+        await this.runWithConcurrency(deepTasks, concurrency, signal)
       );
       results = this.mergeUniqueResults(results, deepResults);
     }
@@ -279,7 +301,8 @@ export class SearchService {
     forceRefresh: boolean,
     concurrency: number,
     ext: Record<string, any>,
-    errorCollector: ErrorCollector
+    errorCollector: ErrorCollector,
+    signal?: AbortSignal
   ): Promise<SearchResult[]> {
     const cacheKey = `plugin:${keyword}:${(plugins ?? [])
       .map((plugin) => plugin?.toLowerCase())
@@ -333,11 +356,18 @@ export class SearchService {
 
         let results: SearchResult[] = [];
         for (const [index, query] of queries.entries()) {
+          // 客户端断开时跳过剩余查询
+          if (signal?.aborted) break;
+
           // 为每次插件请求创建独立的 AbortController，
           // 超时后 withTimeout 会 abort，使底层请求有机会被真正取消（而非泄漏）
           const controller = new AbortController();
+          // 将外部取消和超时合并：任一触发都会 abort
+          const mergedSignal = signal
+            ? AbortSignal.any([signal, controller.signal])
+            : controller.signal;
           const currentResults = await this.withTimeout<SearchResult[]>(
-            plugin.search(query, { ...ext, signal: controller.signal }),
+            plugin.search(query, { ...ext, signal: mergedSignal }),
             timeoutMs,
             [],
             controller
@@ -374,7 +404,8 @@ export class SearchService {
           return [];
         }
       }),
-      concurrency
+      concurrency,
+      signal
     );
 
     const merged: SearchResult[] = [];
@@ -496,11 +527,14 @@ export class SearchService {
 
   private async runWithConcurrency<T>(
     tasks: Array<() => Promise<T>>,
-    limit: number
+    limit: number,
+    signal?: AbortSignal
   ): Promise<T[]> {
     const limitFn = pLimit(limit);
     const limitedTasks = tasks.map((task) => limitFn(task));
-    return Promise.all(limitedTasks);
+    const results = await Promise.all(limitedTasks);
+    // 客户端断开后，后续调用方应检查 signal，这里返回已有结果
+    return results;
   }
 
   getCacheStats() {

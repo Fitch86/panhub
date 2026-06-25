@@ -1,4 +1,4 @@
-import { defineEventHandler, getQuery, sendError, createError } from "h3";
+import { defineEventHandler, getQuery, sendError, createError, getAbortSignal } from "h3";
 import { requireSearchAuth } from "../utils/requireAuth";
 import { getOrCreateSearchService } from "../core/services";
 import { loggers } from "../core/utils/logger";
@@ -63,6 +63,8 @@ export default defineEventHandler(async (event) => {
   else if (req.src === "plugin") req.channels = undefined;
   if (!req.res || req.res === "merge") req.res = "merged_by_type";
 
+  const signal = getAbortSignal(event);
+
   const { response: result, warnings } = await service.searchWithWarnings(
     req.kw,
     req.channels,
@@ -72,7 +74,8 @@ export default defineEventHandler(async (event) => {
     req.src,
     req.plugins,
     req.cloud_types,
-    req.ext || {}
+    req.ext || {},
+    signal
   );
 
   logSearchOnce(kw, {

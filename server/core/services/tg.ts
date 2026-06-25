@@ -7,6 +7,7 @@ import { logger } from "../utils/logger";
 export interface TgFetchOptions {
   limitPerChannel?: number;
   userAgent?: string;
+  signal?: AbortSignal;
 }
 
 export async function fetchTgChannelPosts(
@@ -24,12 +25,15 @@ export async function fetchTgChannelPosts(
   let before: string | undefined;
 
   for (let page = 0; page < maxPages && allResults.length < limit; page++) {
+    // 客户端断开时提前退出分页循环
+    if (options.signal?.aborted) break;
+
     const baseUrl = `https://t.me/s/${encodeURIComponent(channel)}`;
     const url = before ? `${baseUrl}?before=${before}` : baseUrl;
 
     let html = "";
     try {
-      html = await ofetch<string>(url, { headers: { "user-agent": ua } });
+      html = await ofetch<string>(url, { headers: { "user-agent": ua }, signal: options.signal });
     } catch (e: any) {
       logger.debug?.(`TG fetch failed for ${url}: ${e?.message || e}`);
     }
@@ -40,7 +44,7 @@ export async function fetchTgChannelPosts(
         : `https://r.jina.ai/https://t.me/s/${encodeURIComponent(channel)}`;
 
       try {
-        html = await ofetch<string>(mirrorUrl, { headers: { "user-agent": ua } });
+        html = await ofetch<string>(mirrorUrl, { headers: { "user-agent": ua }, signal: options.signal });
       } catch (e: any) {
         logger.debug?.(`TG mirror fetch failed for ${mirrorUrl}: ${e?.message || e}`);
       }

@@ -1,4 +1,4 @@
-import { defineEventHandler, readBody, sendError, createError } from "h3";
+import { defineEventHandler, readBody, sendError, createError, getAbortSignal } from "h3";
 import { requireSearchAuth } from "../utils/requireAuth";
 import { getOrCreateSearchService } from "../core/services";
 import { logSearchOnce } from "../utils/searchLog";
@@ -40,6 +40,8 @@ export default defineEventHandler(async (event) => {
   if (body.src === "tg") body.plugins = undefined;
   else if (body.src === "plugin") body.channels = undefined;
 
+  const signal = getAbortSignal(event);
+
   const { response: result, warnings } = await service.searchWithWarnings(
     kw,
     body.channels,
@@ -49,7 +51,8 @@ export default defineEventHandler(async (event) => {
     body.src,
     body.plugins,
     body.cloud_types,
-    body.ext || {}
+    body.ext || {},
+    signal
   );
 
   logSearchOnce(kw, {
