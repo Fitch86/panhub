@@ -4,9 +4,8 @@
   
 [build.environment]  
   NITRO_PRESET = "netlify"  
-  NODE_VERSION = "18"  
+  NODE_VERSION = "20"  
   
-# Netlify Functions 配置  
 [functions]  
   directory = ".output/server"  
   
@@ -14,10 +13,4 @@
   from = "/*"  
   to = "/.netlify/functions/index"  
   status = 200  
-  force = true  
-  
-[[headers]]  
-  for = "/*"  
-  [headers.values]  
-    X-Frame-Options = "DENY"  
-    X-XSS-Protection = "1; mode=block"
+  force = true
