@@ -1,6 +1,12 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import channelsConfig from "./config/channels.json";
 
+preset: process.env.VERCEL  
+  ? "vercel"  
+  : process.env.NETLIFY  
+  ? "netlify"  
+  : process.env.NITRO_PRESET || "cloudflare-module",
+  
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: false },
