@@ -1,12 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 import channelsConfig from "./config/channels.json";
-
-preset: process.env.VERCEL  
-  ? "vercel"  
-  : process.env.NETLIFY  
-  ? "netlify"  
-  : process.env.NITRO_PRESET || "cloudflare-module",
-  
+ 
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: false },
@@ -43,9 +37,11 @@ export default defineNuxtConfig({
   },
   nitro: {
     // 根据环境变量动态选择部署预设
-    preset: process.env.VERCEL
-      ? "vercel"
-      : process.env.NITRO_PRESET || "node-server",
+   preset: process.env.VERCEL  
+    ? "vercel"  
+    : process.env.NETLIFY  
+    ? "netlify"  
+    : process.env.NITRO_PRESET || "cloudflare-module",
     // Vercel serverless function 最大执行时间（Pro: 60s, Hobby: 10s）
     vercel: {
       functions: {
