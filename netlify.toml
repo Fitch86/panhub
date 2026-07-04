@@ -4,11 +4,17 @@
   
 [build.environment]  
   NITRO_PRESET = "netlify"  
+  NODE_VERSION = "18"  
+  
+# Netlify Functions 配置  
+[functions]  
+  directory = ".output/server"  
   
 [[redirects]]  
   from = "/*"  
-  to = "/index.html"  
+  to = "/.netlify/functions/index"  
   status = 200  
+  force = true  
   
 [[headers]]  
   for = "/*"  
